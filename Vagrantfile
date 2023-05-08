@@ -8,6 +8,8 @@ IP_NW = IP_SECTIONS.captures[0]
 # Last octet excluding all dots:
 IP_START = Integer(IP_SECTIONS.captures[1])
 NUM_WORKER_NODES = settings["nodes"]["workers"]["count"]
+NUM_BIG_NODES = settings["nodes"]["big"]["count"]
+
 
 Vagrant.configure("2") do |config|
   config.vm.provision "shell", env: { "IP_NW" => IP_NW, "IP_START" => IP_START, "NUM_WORKER_NODES" => NUM_WORKER_NODES }, inline: <<-SHELL
@@ -58,11 +60,41 @@ Vagrant.configure("2") do |config|
       path: "scripts/master.sh"
   end
 
+  (1..NUM_BIG_NODES).each do |i|
+
+    config.vm.define "big0#{i}" do |node|
+      node.vm.hostname = "big-node0#{i}"
+      node.vm.network "private_network", ip: IP_NW + "#{IP_START + i}"
+      if settings["shared_folders"]
+        settings["shared_folders"].each do |shared_folder|
+          node.vm.synced_folder shared_folder["host_path"], shared_folder["vm_path"]
+        end
+      end
+      node.vm.provider "virtualbox" do |vb|
+          vb.cpus = settings["nodes"]["big"]["cpu"]
+          vb.memory = settings["nodes"]["big"]["memory"]
+          if settings["cluster_name"] and settings["cluster_name"] != ""
+            vb.customize ["modifyvm", :id, "--groups", ("/" + settings["cluster_name"])]
+          end
+      end
+      node.vm.provision "shell",
+        env: {
+          "DNS_SERVERS" => settings["network"]["dns_servers"].join(" "),
+          "ENVIRONMENT" => settings["environment"],
+          "KUBERNETES_VERSION" => settings["software"]["kubernetes"],
+          "OS" => settings["software"]["os"]
+        },
+        path: "scripts/common.sh"
+      node.vm.provision "shell", path: "scripts/node.sh"
+    end
+
+  end
+
   (1..NUM_WORKER_NODES).each do |i|
 
     config.vm.define "node0#{i}" do |node|
       node.vm.hostname = "worker-node0#{i}"
-      node.vm.network "private_network", ip: IP_NW + "#{IP_START + i}"
+      node.vm.network "private_network", ip: IP_NW + "#{IP_START + NUM_BIG_NODES + i}"
       if settings["shared_folders"]
         settings["shared_folders"].each do |shared_folder|
           node.vm.synced_folder shared_folder["host_path"], shared_folder["vm_path"]
@@ -92,4 +124,6 @@ Vagrant.configure("2") do |config|
     end
 
   end
+  
+
 end 
