@@ -1,0 +1,1 @@
+docker run -d --restart=unless-stopped -v ${PWD}/volume:/var/lib/rancher -p 8080:80 -p 443:443 --privileged rancher/rancher
